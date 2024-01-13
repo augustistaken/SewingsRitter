@@ -1,11 +1,19 @@
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class FiveAlternating extends MyBot implements Strategy {
+public class LoseAlternating extends MyBot implements Strategy {
     private int currentStrategy = 0;
+    private int gameNumber;
+    private int wins;
+
     @Override
     public void reset() {
         if (turnNumber == 15) {
+            gameNumber++;
+            if(myPoints > hisPoints)
+                wins++;
+        }
+        if((gameNumber - wins) % 10 == 0) {
             currentStrategy++;
         }
         super.reset();
@@ -156,4 +164,5 @@ public class FiveAlternating extends MyBot implements Strategy {
 
 
 }
+
 

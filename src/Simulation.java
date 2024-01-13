@@ -1,4 +1,3 @@
-import java.util.ArrayList;
 import java.util.List;
 
 public class Simulation {
@@ -6,18 +5,11 @@ public class Simulation {
     private List<Integer> specialCards;
     private int index;
 
-    private int enemyPoints;
     private int myPoints;
     private int points;
 
     private Strategy myPlayer;
     private Strategy enemyPlayer;
-
-    public Simulation(List<Integer> specialCards, Strategy myStrategy, Strategy enemyStrategy) {
-        this.specialCards = new ArrayList<>(specialCards);
-        myPlayer = myStrategy;
-        enemyPlayer = enemyStrategy;
-    }
 
     private int generateSpecificSpecialCard() {
         return specialCards.get(index);
@@ -27,17 +19,23 @@ public class Simulation {
 
         int cardPlayedFor = generateSpecificSpecialCard();
         index++;
+
         points = points + cardPlayedFor;
 
         int enemyTurn = enemyPlayer.giveCard(cardPlayedFor);
 
         int myTurn = myPlayer.giveCard(cardPlayedFor);
 
-        if (enemyTurn != myTurn) {
-            if (enemyTurn > myTurn)
-                enemyPoints = enemyPoints + points;
-            else
-                myPoints = myPoints + points;
+        if (myTurn != enemyTurn) {
+            if(points > 0) {
+                if (myTurn > enemyTurn) {
+                    myPoints = myPoints + points;
+                }
+            } else {
+                if (myTurn < enemyTurn) {
+                    myPoints = myPoints + points;
+                }
+            }
             points = 0;
         }
     }
@@ -49,13 +47,19 @@ public class Simulation {
         return myPoints;
     }
 
-    public void resetGame() {
+    public void resetSimulation() {
         index = 0;
-        ((MyBot) myPlayer).reset();
-        ((MyBot) enemyPlayer).reset();
-        enemyPoints = 0;
         myPoints = 0;
         points = 0;
+    }
+
+    public void setSpecialCards(List<Integer> specialCards) {
+        this.specialCards = specialCards;
+    }
+
+    public void setStrategies(Strategy myStrategy, Strategy enemyStrategy) {
+        myPlayer = myStrategy;
+        enemyPlayer = enemyStrategy;
     }
 
 }
