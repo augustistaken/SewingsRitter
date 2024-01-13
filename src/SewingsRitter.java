@@ -13,6 +13,7 @@ public class SewingsRitter extends MyBot {
     private int numOfTestGames = 100;
     private int numOfAnalysisGames = 5;
     private Simulation simulation;
+    List<int[]> strategyPerformanceData = new ArrayList<>();
 
     public SewingsRitter() {
         super();
@@ -32,8 +33,7 @@ public class SewingsRitter extends MyBot {
             }
             pastGames.add(new Counter(hisCardsPlayed, specialCardsPlayed));
             pastWinPoints.add(myPoints);
-            gameNumber++;
-            System.out.println("Wins: " + wins + " out of " + gameNumber);
+            System.out.println("Wins: " + wins + " out of " + (gameNumber + 1));
             evaluation();
             patternAnalysis();
             if(futureStrategies.get(gameNumber) == null) {
@@ -41,6 +41,7 @@ public class SewingsRitter extends MyBot {
             } else {
                 currentStrategy = futureStrategies.get(gameNumber);
             }
+            gameNumber++;
             ((MyBot) currentStrategy).reset();
         }
         super.reset();
@@ -58,49 +59,61 @@ public class SewingsRitter extends MyBot {
     }
 
     private void patternAnalysis() {
-        int strategiesSize = strategies.size();
         int pastGamesSize = pastGames.size();
-        int[][] points = new int[strategiesSize][pastGamesSize];
-        for(int i=0;i<strategiesSize;i++) {
-            Strategy strategy = strategies.get(i);
-            for (int j = 0; j < pastGamesSize; j++) { //Runs a strategy against all past games
-                Counter pastStrategy = pastGames.get(j);
-                for (int k = 0; k < numOfAnalysisGames; k++) {
-                    Collections.shuffle(specialCardsPlayed);
-                    simulation.resetSimulation();
-                    simulation.setSpecialCards(specialCardsPlayed);
-                    simulation.setStrategies(strategy, pastStrategy);
-                    points[i][j] += simulation.playGame();
-                }
-            }
-            int winnerIndex = -1;
-            for (int j = 0; j < pastGamesSize; j++) { //Runs through the results of the games
-                int pointsWon = pastWinPoints.get(i);
-                winnerIndex = j;
-                if (points[i][j] > (pointsWon * 1.125 * numOfAnalysisGames)) {
-                    pastWinPoints.set(i, points[i][j] / numOfAnalysisGames);
-                    break;
-                }
-            }
-            if(winnerIndex != -1)
-                futureStrategies.set(winnerIndex, strategy);
-            int firstIndex = -1;
-            for (int j = 0; j < strategiesSize; j++) {
-                if (strategy.equals(futureStrategies.get(j))) {
-                    if (firstIndex == -1) {
-                        firstIndex = j; // Store the first index where the strategy is found.
-                    } else {
-                        int secondIndex = j; // Store the second index where the strategy is found.
-                        int distance = secondIndex - firstIndex;
-                        for (int k = secondIndex + distance; k < futureStrategies.size(); k += distance) {
-                            futureStrategies.set(k, strategy); // Update futureStrategies based on the calculated distance.
-                        }
-                        break; // Exit the loop after updating futureStrategies.
-                    }
-                }
+        Strategy newStrategy = strategies.get(strategies.size() - 1); // Get the latest strategy
+        int[] points = new int[pastGamesSize]; // Array to store points for the new strategy
+
+        for (int j = 0; j < pastGamesSize; j++) {
+            Counter pastStrategy = pastGames.get(j);
+            for (int k = 0; k < numOfAnalysisGames; k++) {
+                Collections.shuffle(specialCardsPlayed);
+                simulation.resetSimulation();
+                simulation.setSpecialCards(specialCardsPlayed);
+                simulation.setStrategies(newStrategy, pastStrategy);
+                points[j] += simulation.playGame();
             }
         }
+
+        // Store the performance data of the new strategy
+        strategyPerformanceData.add(points);
+
+        // Analyze the performance of the new strategy
+        Map<Strategy, Double> performanceResults = analyzeStrategyPerformance();
+
+        // Update future strategies based on analysis
+        updateFutureStrategies(performanceResults);
     }
+
+    private Map<Strategy, Double> analyzeStrategyPerformance() {
+        Map<Strategy, Double> strategyPerformance = new HashMap<>();
+        int strategiesSize = strategies.size();
+
+        for (int i = 0; i < strategiesSize; i++) {
+            int[] points = strategyPerformanceData.get(i);
+            double averagePoints = Arrays.stream(points).average().orElse(0.0);
+            strategyPerformance.put(strategies.get(i), averagePoints);
+        }
+
+        return strategyPerformance;
+    }
+
+    private void updateFutureStrategies(Map<Strategy, Double> performanceResults) {
+        // Sort strategies by performance in descending order
+        List<Strategy> sortedStrategies = performanceResults.entrySet().stream()
+                .sorted(Map.Entry.<Strategy, Double>comparingByValue().reversed())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+
+        // Logic to update futureStrategies
+        // Example: Assign the top-performing strategy to the next game
+        if (!sortedStrategies.isEmpty()) {
+            futureStrategies.set(gameNumber, sortedStrategies.get(0));
+        }
+
+        // Further logic to update futureStrategies based on sortedStrategies
+        // and other criteria as per your game's strategy
+    }
+
 
     public void evaluation() {
         int[] permArray; // Array to store successful permutations
