@@ -14,6 +14,7 @@ public class Counter extends MyBot implements Strategy {
     public void reset() {
         super.reset();
     }
+
     @Override
     public int giveCard(int nextCard) {
         return specialMyCards.get(nextCard);
