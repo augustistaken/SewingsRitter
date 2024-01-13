@@ -1,20 +1,24 @@
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class SewingsRitter extends MyBot {
 
     private int gameNumber;
     private int wins;
     private Strategy currentStrategy;
-    private List<Strategy> futureStrategies = new ArrayList<>(990);
-    private List<Strategy> strategies = new ArrayList<>(1000);
+    private List<Integer> pastWinPoints = new ArrayList<>();
+    private List<Strategy> futureStrategies = new ArrayList<>();
+    private List<Strategy> strategies = new ArrayList<>();
     private List<Counter> pastGames = new ArrayList<>();
     private int numOfTestGames = 100;
     private int numOfAnalysisGames = 15;
-    private int analysisOn = 10;
 
     public SewingsRitter() {
         super();
+        for(int i = 0;i<1000;i++) {
+            futureStrategies.add(null);
+        }
     }
 
     @Override
@@ -27,16 +31,17 @@ public class SewingsRitter extends MyBot {
                 wins++;
             }
             pastGames.add(new Counter(hisCardsPlayed, specialCardsPlayed));
+            pastWinPoints.add(myPoints);
             gameNumber++;
-            if(gameNumber % analysisOn == 0) {
-                patternAnalysis();
-            }
             System.out.println("Wins: " + wins + " out of " + gameNumber);
-            if (gameNumber == 1) {
-                evaluation();
+            evaluation();
+            patternAnalysis();
+            if(futureStrategies.get(gameNumber) == null) {
+                currentStrategy = strategies.get(gameNumber - 1);
             } else {
-                ((MyBot) currentStrategy).reset();
+                currentStrategy = futureStrategies.get(gameNumber);
             }
+            ((MyBot) currentStrategy).reset();
         }
         super.reset();
     }
@@ -56,16 +61,39 @@ public class SewingsRitter extends MyBot {
         int[][] points = new int[strategies.size()][pastGames.size()];
         for(int i=0;i<strategies.size();i++) {
             Strategy strategy = strategies.get(i);
-            for(int j=0;j<pastGames.size();j++) { //Runs a strategy against all past games
+            for (int j = 0; j < pastGames.size(); j++) { //Runs a strategy against all past games
                 Counter pastStrategy = pastGames.get(j);
-                for(int k = 0; k<numOfAnalysisGames;k++) {
+                for (int k = 0; k < numOfAnalysisGames; k++) {
                     Collections.shuffle(specialCardsPlayed);
                     points[i][j] += (new Simulation(specialCardsPlayed, strategy, pastStrategy)).playGame();
                 }
             }
-
+            int winnerIndex = -1;
+            for (int j = 0; j < pastGames.size(); j++) { //Runs through the results of the games
+                int pointsWon = pastWinPoints.get(i);
+                winnerIndex = j;
+                if (points[i][j] > (pointsWon * 1.125 * numOfAnalysisGames)) {
+                    pastWinPoints.set(i, points[i][j] / numOfAnalysisGames);
+                    break;
+                }
+            }
+            if(winnerIndex != -1)
+                futureStrategies.set(winnerIndex, strategy);
+            List<Integer> indexes = new ArrayList<>();
+            for (int j = 0; j < strategies.size(); j++) {
+                if (strategy.equals(futureStrategies.get(j))) {
+                    indexes.add(j);
+                }
+                if (indexes.size() > 1) {
+                    int firstIndex = indexes.remove(0);
+                    int secondIndex = indexes.get(0);
+                    int distance = secondIndex - firstIndex;
+                    for (int k = secondIndex + distance;  k < futureStrategies.size(); k += distance) {
+                        futureStrategies.set(k, strategy);
+                    }
+                }
+            }
         }
-
     }
 
     private void evaluation() {
@@ -158,39 +186,12 @@ public class SewingsRitter extends MyBot {
                 mostPoints = points;
             }
         }
-        if(finalStrategy != null)
+        if(finalStrategy != null) {
             strategies.add(finalStrategy);
+        }
     }
 
     private int firstRun(int nextCard) {
-        int myCard = 0;
-        switch(nextCard) {
-            case -5: case -4: case -3:
-                do {
-                    myCard = Utils.random.nextInt(4 - 1) + 1;
-                } while(!myCards.contains(myCard));
-                break;
-            case -2: case -1: case 1:
-                do {
-                    myCard = Utils.random.nextInt(7 - 4) + 4;
-                } while(!myCards.contains(myCard));
-                break;
-            case 2: case 3: case 4:
-                do {
-                    myCard = Utils.random.nextInt(10 - 7) + 7;
-                } while(!myCards.contains(myCard));
-                break;
-            case 5: case 6: case 7:
-                do {
-                    myCard = Utils.random.nextInt(13 - 10) + 10;
-                } while(!myCards.contains(myCard));
-                break;
-            case 8: case 9: case 10:
-                do {
-                    myCard = Utils.random.nextInt(16 - 13) + 13;
-                } while(!myCards.contains(myCard));
-                break;
-        }
-        return myCard;
+        return myCards.get(Utils.random.nextInt(myCards.size()));
     }
 }
