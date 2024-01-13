@@ -11,9 +11,9 @@ public class Simulation {
     private int points;
 
     private Strategy myPlayer;
-    private Last enemyPlayer;
+    private Strategy enemyPlayer;
 
-    public Simulation(List<Integer> specialCards, Strategy myStrategy, Last enemyStrategy) {
+    public Simulation(List<Integer> specialCards, Strategy myStrategy, Strategy enemyStrategy) {
         this.specialCards = new ArrayList<>(specialCards);
         myPlayer = myStrategy;
         enemyPlayer = enemyStrategy;
