@@ -14,6 +14,16 @@ import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Die Klasse SewingsRitter ist eine Erweiterung der Klasse MyBot und implementiert eine spezialisierte Strategie
+ * für ein Kartenspiel. Diese Klasse verwendet verschiedene Analyse- und Entscheidungsfindungstechniken,
+ * um im Spiel zu gewinnen. Sie nutzt historische Daten, führt Simulationen durch und passt ihre Strategien
+ * dynamisch an, um die Leistung im Spiel zu optimieren.
+ *
+ * Zu den Hauptfunktionen gehören die Analyse der vergangenen Spiele, die Bewertung der Effektivität verschiedener
+ * Strategien dagegen, die Anpassung der Strategien basierend auf den gewonnenen Erkenntnissen und die dynamische
+ * Anpassung wichtiger Parameter wie Epsilon und leider nicht Smoothing-Faktor, da ich heute abgeben muss.
+ */
 public class SewingsRitter extends MyBot {
 
     private int gameNumber;
@@ -50,6 +60,9 @@ public class SewingsRitter extends MyBot {
         SwingUtilities.invokeLater(this::createAndShowChart);
     }
 
+    /**
+     * Passt den Epsilon-Wert basierend auf der Anzahl der aufeinanderfolgenden Gewinne und Verluste an.
+     */
     private void adjustEpsilon() {
         if(consecutiveLoss > consecutiveWins) {
             if (consecutiveLoss == LOSS_THRESHOLD) {
@@ -66,6 +79,9 @@ public class SewingsRitter extends MyBot {
         }
     }
 
+    /**
+     * Erstellt und zeigt ein Diagramm mit den Gewinnen über die Zeit.
+     */
     private void createAndShowChart() {
         JFreeChart chart = createChart(createDataset());
         chartPanel = new ChartPanel(chart);
@@ -78,6 +94,9 @@ public class SewingsRitter extends MyBot {
         frame.setVisible(true);
     }
 
+    /**
+     * Erstellt ein Datenset für das Diagramm basierend auf der Historie der Gewinne.
+     */
     private XYDataset createDataset() {
         DefaultXYDataset dataset = new DefaultXYDataset();
         double[][] data = new double[2][winsHistory.size()];
@@ -91,6 +110,9 @@ public class SewingsRitter extends MyBot {
         return dataset;
     }
 
+    /**
+     * Erstellt ein Liniendiagramm basierend auf dem übergebenen Datenset.
+     */
     private JFreeChart createChart(XYDataset dataset) {
         JFreeChart chart = ChartFactory.createXYLineChart(
                 "Wins Over Time",
@@ -114,6 +136,9 @@ public class SewingsRitter extends MyBot {
         return chart;
     }
 
+    /**
+     * Aktualisiert die Anzahl der Gewinne und aktualisiert das Diagramm.
+     */
     public void updateWins(int newWins) {
         wins = newWins;
         winsHistory.add(wins);
@@ -128,15 +153,12 @@ public class SewingsRitter extends MyBot {
         }
     }
 
-
-
-
+    /**
+     * Setzt den Zustand des Bots für einen neuen Durchlauf zurück.
+     */
     @Override
     public void reset() {
         if (turnNumber == 15) {
-            System.out.println(gameNumber);
-            System.out.println(epsilon);
-            System.out.println(smoothingFactor);
             turnNumber = 0;
             gamePointsHistory.add(myPoints);
             if (myPoints > hisPoints) {
@@ -164,7 +186,9 @@ public class SewingsRitter extends MyBot {
         super.reset();
     }
 
-
+    /**
+     * Wählt eine Karte basierend auf der aktuellen Strategie oder der ersten Runde.
+     */
     @Override
     public int gibKarte(int nextCard) {
         int myCard = 0;
@@ -176,6 +200,11 @@ public class SewingsRitter extends MyBot {
         return myCard;
     }
 
+    /**
+     * Führt eine Musteranalyse durch, um die Leistung neuer Strategien zu bewerten.
+     * Diese Methode vergleicht eine neue Strategie mit allen vergangenen Spielen, um ihre Wirksamkeit zu beurteilen.
+     * Basierend auf dieser Analyse werden die Leistungsdaten aktualisiert und zukünftige Strategien angepasst.
+     */
     private void patternAnalysis() {
         int pastGamesSize = pastGames.size();
         Strategy newStrategy = strategies.get(strategies.size() - 1); // Get the latest strategy
@@ -203,6 +232,10 @@ public class SewingsRitter extends MyBot {
         updateFutureStrategies(performanceResults);
     }
 
+    /**
+     * Aktualisiert die Leistungsdaten vergangener Strategien, um sie mit neuen Strategien abzugleichen.
+     * Erweitert die vorhandenen Leistungsdaten, um sie mit der aktuellen Größe der vergangenen Spiele zu synchronisieren.
+     */
     private void updatePastStrategyPerformanceData(int pastGamesSize) {
         for (int i = 0; i < strategyPerformanceData.size() - 1; i++) {
             int[] currentData = strategyPerformanceData.get(i);
@@ -213,6 +246,10 @@ public class SewingsRitter extends MyBot {
         }
     }
 
+    /**
+     * Analysiert die Leistung der Strategien und berechnet den exponentiell gleitenden Durchschnitt (EMA) für jede.
+     * Verwendet die EMA-Werte, um die Leistung der Strategien zu bewerten.
+     */
     private Map<Strategy, Double> analyzeStrategyPerformance() {
         Map<Strategy, Double> strategyPerformance = new HashMap<>();
         for (int i = 0; i < strategies.size(); i++) {
@@ -222,6 +259,10 @@ public class SewingsRitter extends MyBot {
         return strategyPerformance;
     }
 
+    /**
+     * Berechnet den exponentiell gleitenden Durchschnitt (EMA) für eine gegebene Reihe von Punkten.
+     * Behandelt '-1'-Werte als spezielle Fälle, indem sie leicht angepasst werden, bevor sie in die Berechnung einfließen.
+     */
     private double calculateExponentialMovingAverage(int[] points) {
         double ema = 0.0;
         boolean isFirstValidPoint = true;
@@ -243,8 +284,12 @@ public class SewingsRitter extends MyBot {
         return ema;
     }
 
-
-
+    /**
+     * Aktualisiert die zukünftige Strategie basierend auf den Leistungsergebnissen.
+     * Entscheidet zwischen Exploration (Auswahl einer zufälligen Strategie) und Exploitation
+     * (Auswahl der leistungsstärksten Strategie basierend auf den EMA-Werten), abhängig von einem Zufallswert
+     * und dem Epsilon-Wert.
+     */
     private void updateFutureStrategies(Map<Strategy, Double> performanceResults) {
         if (Math.random() < epsilon) {
             // Exploration: Choose a random strategy
@@ -263,6 +308,11 @@ public class SewingsRitter extends MyBot {
         }
     }
 
+    /**
+     * Bewertet verschiedene Strategien basierend auf Simulationsergebnissen und wählt die effektivste Strategie aus.
+     * Diese Methode verwendet eine Kombination aus Permutationsanalyse und Simulation, um die leistungsstärksten
+     * Strategien zu identifizieren und zur Strategieliste hinzuzufügen.
+     */
     public void evaluation() {
         int[] permArray; // Array to store successful permutations
         Set<int[]> winningStrategies = new HashSet<>();
@@ -364,6 +414,9 @@ public class SewingsRitter extends MyBot {
         }
     }
 
+    /**
+     * Wählt eine Karte in der ersten Runde aus.
+     */
     private int firstRun(int nextCard) {
         return myCards.get(Utils.random.nextInt(myCards.size()));
     }
