@@ -5,22 +5,17 @@ public class SewingsRitter extends MyBot {
 
     private int gameNumber;
     private int wins;
-    private Strategy currentStrategy;
-    private List<Integer> pastWinPoints = new ArrayList<>(1000);
-    private List<Strategy> futureStrategies = new ArrayList<>(1000);
+    private Strategy nextStrategy = null;
     private List<Strategy> strategies = new ArrayList<>(1000);
     private List<Counter> pastGames = new ArrayList<>(1000);
     private int numOfTestGames = 100;
-    private int numOfAnalysisGames = 5;
+    private int numOfAnalysisGames = 15;
     private Simulation simulation;
     List<int[]> strategyPerformanceData = new ArrayList<>();
-    private int consecutiveLosses = 0;
+    private Strategy currentStrategy;
 
     public SewingsRitter() {
         super();
-        for(int i = 0;i<1000;i++) {
-            futureStrategies.add(null);
-        }
         simulation = new Simulation();
     }
 
@@ -31,22 +26,16 @@ public class SewingsRitter extends MyBot {
 
             if (myPoints > hisPoints) {
                 wins++;
-                consecutiveLosses = 0; // Reset on win
-            } else {
-                consecutiveLosses++; // Increment on loss
             }
             pastGames.add(new Counter(hisCardsPlayed, specialCardsPlayed));
-            pastWinPoints.add(myPoints);
             System.out.println("Wins: " + wins + " out of " + (gameNumber + 1));
             evaluation();
             patternAnalysis();
-            if(futureStrategies.get(gameNumber) == null) {
-                currentStrategy = strategies.get(gameNumber - 1);
-            } else {
-                currentStrategy = futureStrategies.get(gameNumber);
+            if(nextStrategy != null) {
+                currentStrategy = nextStrategy;
+                ((MyBot) currentStrategy).reset();
             }
             gameNumber++;
-            ((MyBot) currentStrategy).reset();
         }
         super.reset();
     }
@@ -54,7 +43,7 @@ public class SewingsRitter extends MyBot {
     @Override
     public int gibKarte(int nextCard) {
         int myCard = 0;
-        if(strategies.isEmpty())
+        if(nextStrategy == null)
             myCard = firstRun(nextCard);
         else
             myCard = currentStrategy.giveCard(nextCard);
@@ -65,8 +54,9 @@ public class SewingsRitter extends MyBot {
     private void patternAnalysis() {
         int pastGamesSize = pastGames.size();
         Strategy newStrategy = strategies.get(strategies.size() - 1); // Get the latest strategy
-        int[] points = new int[pastGamesSize]; // Array to store points for the new strategy
+        int[] newStrategyPoints = new int[pastGamesSize]; // Array to store points for the new strategy
 
+        // Evaluate the new strategy against all past games
         for (int j = 0; j < pastGamesSize; j++) {
             Counter pastStrategy = pastGames.get(j);
             for (int k = 0; k < numOfAnalysisGames; k++) {
@@ -74,79 +64,95 @@ public class SewingsRitter extends MyBot {
                 simulation.resetSimulation();
                 simulation.setSpecialCards(specialCardsPlayed);
                 simulation.setStrategies(newStrategy, pastStrategy);
-                points[j] += simulation.playGame();
+                newStrategyPoints[j] += simulation.playGame();
             }
         }
+        applyDecayToPerformanceData();
+        // Update the performance data for the new strategy
+        strategyPerformanceData.add(newStrategyPoints);
 
-        // Store the performance data of the new strategy
-        strategyPerformanceData.add(points);
+        // Update performance data for past strategies to align with the new strategy
+        updatePastStrategyPerformanceData(pastGamesSize);
 
-        // Analyze the performance of the new strategy
+        // Analyze the performance and update future strategies
         Map<Strategy, Double> performanceResults = analyzeStrategyPerformance();
-
-        // Update future strategies based on analysis
         updateFutureStrategies(performanceResults);
     }
 
-    private double determineDecayFactor(int gameNumber) {
-        int[] intervals = {5, 10, 20, 80}; // Define intervals
-        double[] decayFactors = {0.85, 0.8, 0.75}; // Adjusted decay factors
-
-        int cumulativeGames = 0;
-        for (int i = 0; i < intervals.length; i++) {
-            cumulativeGames += intervals[i];
-            if (gameNumber < cumulativeGames) {
-                return decayFactors[i];
-            }
+    private void updatePastStrategyPerformanceData(int pastGamesSize) {
+        for (int i = 0; i < strategyPerformanceData.size() - 1; i++) {
+            int[] currentData = strategyPerformanceData.get(i);
+                int[] extendedData = new int[pastGamesSize];
+                System.arraycopy(currentData, 0, extendedData, 0, currentData.length);
+                Arrays.fill(extendedData, currentData.length, extendedData.length, -1);
+                strategyPerformanceData.set(i, extendedData);
         }
-
-        return 0.7; // Default decay factor for game numbers beyond the last defined interval
     }
 
+    private void applyDecayToPerformanceData() {
+        for (int i = 0; i < strategyPerformanceData.size(); i++) {
+            int[] data = strategyPerformanceData.get(i);
+            for (int j = 0; j < data.length; j++) {
+                if(data[j] == -1)
+                    continue;
+                data[j] = (int) (data[j] * Math.pow(0.99,(j + 1)));
+            }
+            strategyPerformanceData.set(i, data);
+        }
+    }
 
 
     private Map<Strategy, Double> analyzeStrategyPerformance() {
         Map<Strategy, Double> strategyPerformance = new HashMap<>();
-        int strategiesSize = strategies.size();
-        double decayFactor = determineDecayFactor(gameNumber); // Adjust this value as needed
+        for (int i = 0; i < strategies.size(); i++) {
+            double ema = calculateExponentialMovingAverage(strategyPerformanceData.get(i));
+            strategyPerformance.put(strategies.get(i), ema);
+        }
+        return strategyPerformance;
+    }
 
-        for (int i = 0; i < strategiesSize; i++) {
-            int[] points = strategyPerformanceData.get(i);
-            double weightedSum = 0.0;
-            double totalWeight = 0.0;
-            double currentWeight = 1.0;
+    private double calculateExponentialMovingAverage(int[] points) {
+        double ema = 0.0;
+        double smoothingFactor = 0.2; // You can adjust this factor as needed
 
-            for (int j = points.length - 1; j >= 0; j--) {
-                weightedSum += points[j] * currentWeight;
-                totalWeight += currentWeight;
-                currentWeight *= decayFactor;
+        int validDataCount = 0; // Keep track of the number of valid data points
+
+        if (points.length > 0) {
+            for (int i = 0; i < points.length; i++) {
+                if (points[i] != -1) {
+                    if (validDataCount == 0) {
+                        ema = points[i]; // Initialize EMA with the first valid data point
+                    } else {
+                        ema = smoothingFactor * points[i] + (1 - smoothingFactor) * ema;
+                    }
+                    validDataCount++;
+                }
             }
-
-            double weightedAverage = (totalWeight > 0) ? (weightedSum / totalWeight) : 0.0;
-            strategyPerformance.put(strategies.get(i), weightedAverage);
         }
 
-        return strategyPerformance;
+        return ema;
     }
 
 
     private void updateFutureStrategies(Map<Strategy, Double> performanceResults) {
-        // Sort strategies by performance in descending order
-        List<Strategy> sortedStrategies = performanceResults.entrySet().stream()
-                .sorted(Map.Entry.<Strategy, Double>comparingByValue().reversed())
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toList());
+        double epsilon = 0.1; // Probability of choosing a random strategy
 
-        // Logic to update futureStrategies
-        // Example: Assign the top-performing strategy to the next game
-        if (!sortedStrategies.isEmpty()) {
-            futureStrategies.set(gameNumber, sortedStrategies.get(0));
+        if (Math.random() < epsilon) {
+            // Exploration: Choose a random strategy
+            int randomIndex = Utils.random.nextInt(strategies.size());
+            nextStrategy = strategies.get(randomIndex);
+        } else {
+            // Exploitation: Choose the best-performing strategy based on EMA scores
+            List<Strategy> sortedStrategies = performanceResults.entrySet().stream()
+                    .sorted(Map.Entry.<Strategy, Double>comparingByValue().reversed())
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+
+            if (!sortedStrategies.isEmpty()) {
+                nextStrategy = sortedStrategies.get(0);
+            }
         }
-
-        // Further logic to update futureStrategies based on sortedStrategies
-        // and other criteria as per your game's strategy
     }
-
 
     public void evaluation() {
         int[] permArray; // Array to store successful permutations
