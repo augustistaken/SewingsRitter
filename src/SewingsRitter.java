@@ -14,6 +14,7 @@ public class SewingsRitter extends MyBot {
     private int numOfAnalysisGames = 5;
     private Simulation simulation;
     List<int[]> strategyPerformanceData = new ArrayList<>();
+    private int consecutiveLosses = 0;
 
     public SewingsRitter() {
         super();
@@ -30,6 +31,9 @@ public class SewingsRitter extends MyBot {
 
             if (myPoints > hisPoints) {
                 wins++;
+                consecutiveLosses = 0; // Reset on win
+            } else {
+                consecutiveLosses++; // Increment on loss
             }
             pastGames.add(new Counter(hisCardsPlayed, specialCardsPlayed));
             pastWinPoints.add(myPoints);
@@ -84,18 +88,47 @@ public class SewingsRitter extends MyBot {
         updateFutureStrategies(performanceResults);
     }
 
+    private double determineDecayFactor(int gameNumber) {
+        int[] intervals = {5, 10, 20, 80}; // Define intervals
+        double[] decayFactors = {0.85, 0.8, 0.75}; // Adjusted decay factors
+
+        int cumulativeGames = 0;
+        for (int i = 0; i < intervals.length; i++) {
+            cumulativeGames += intervals[i];
+            if (gameNumber < cumulativeGames) {
+                return decayFactors[i];
+            }
+        }
+
+        return 0.7; // Default decay factor for game numbers beyond the last defined interval
+    }
+
+
+
     private Map<Strategy, Double> analyzeStrategyPerformance() {
         Map<Strategy, Double> strategyPerformance = new HashMap<>();
         int strategiesSize = strategies.size();
+        double decayFactor = determineDecayFactor(gameNumber); // Adjust this value as needed
 
         for (int i = 0; i < strategiesSize; i++) {
             int[] points = strategyPerformanceData.get(i);
-            double averagePoints = Arrays.stream(points).average().orElse(0.0);
-            strategyPerformance.put(strategies.get(i), averagePoints);
+            double weightedSum = 0.0;
+            double totalWeight = 0.0;
+            double currentWeight = 1.0;
+
+            for (int j = points.length - 1; j >= 0; j--) {
+                weightedSum += points[j] * currentWeight;
+                totalWeight += currentWeight;
+                currentWeight *= decayFactor;
+            }
+
+            double weightedAverage = (totalWeight > 0) ? (weightedSum / totalWeight) : 0.0;
+            strategyPerformance.put(strategies.get(i), weightedAverage);
         }
 
         return strategyPerformance;
     }
+
 
     private void updateFutureStrategies(Map<Strategy, Double> performanceResults) {
         // Sort strategies by performance in descending order
