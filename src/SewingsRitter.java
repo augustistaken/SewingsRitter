@@ -1,10 +1,25 @@
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.ChartPanel;
+import org.jfree.chart.JFreeChart;
+import org.jfree.chart.plot.PlotOrientation;
+import org.jfree.chart.plot.XYPlot;
+import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
+import org.jfree.ui.RectangleInsets;
+import org.jfree.data.xy.DefaultXYDataset;
+import org.jfree.data.xy.XYDataset;
+
+import javax.swing.*;
+import java.awt.*;
 import java.util.*;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class SewingsRitter extends MyBot {
 
     private int gameNumber;
     private int wins;
+    private List<Integer> gamePointsHistory = new ArrayList<>(1000);
+    private List<Strategy> usedStrategies = new ArrayList<>(1000);
     private Strategy nextStrategy = null;
     private List<Strategy> strategies = new ArrayList<>(1000);
     private List<Counter> pastGames = new ArrayList<>(1000);
@@ -13,32 +28,142 @@ public class SewingsRitter extends MyBot {
     private Simulation simulation;
     List<int[]> strategyPerformanceData = new ArrayList<>();
     private Strategy currentStrategy;
+    private List<Integer> winsHistory = new ArrayList<>();
+    private ChartPanel chartPanel;
+    private double smoothingFactor = 0.05;
+    private double epsilon = 0.7; // FIX ME 0.7
+    private int consecutiveLoss = 0;
+    private int consecutiveWins = 0;
+    private static final double LOSS_THRESHOLD = 2;
+    private static final double WIN_THRESHOLD = 4;
+
+    private static final double DELTA_EPSILON = 0.1;
+    private static final double MAX_EPSILON = 1;
+    private static final double MIN_EPSILON = 0;
 
     public SewingsRitter() {
         super();
+
         simulation = new Simulation();
+
+        winsHistory = new ArrayList<>();
+        SwingUtilities.invokeLater(this::createAndShowChart);
     }
+
+    private void adjustEpsilon() {
+        if(consecutiveLoss > consecutiveWins) {
+            if (consecutiveLoss == LOSS_THRESHOLD) {
+                epsilon = Math.min(epsilon + DELTA_EPSILON, MAX_EPSILON);
+                consecutiveLoss = 0;
+                consecutiveWins = 0;
+            }
+        } else {
+            if(consecutiveWins == WIN_THRESHOLD) {
+                epsilon = Math.max(epsilon - DELTA_EPSILON, MIN_EPSILON);
+                consecutiveWins = 0;
+                consecutiveWins = 0;
+            }
+        }
+    }
+
+    private void createAndShowChart() {
+        JFreeChart chart = createChart(createDataset());
+        chartPanel = new ChartPanel(chart);
+        chartPanel.setPreferredSize(new Dimension(800, 400));
+
+        JFrame frame = new JFrame("Wins Over Time");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.add(chartPanel);
+        frame.pack();
+        frame.setVisible(true);
+    }
+
+    private XYDataset createDataset() {
+        DefaultXYDataset dataset = new DefaultXYDataset();
+        double[][] data = new double[2][winsHistory.size()];
+
+        for (int i = 0; i < winsHistory.size(); i++) {
+            data[0][i] = i;
+            data[1][i] = winsHistory.get(i);
+        }
+
+        dataset.addSeries("Wins Over Time", data);
+        return dataset;
+    }
+
+    private JFreeChart createChart(XYDataset dataset) {
+        JFreeChart chart = ChartFactory.createXYLineChart(
+                "Wins Over Time",
+                "Game Number",
+                "Wins",
+                dataset,
+                PlotOrientation.VERTICAL,
+                true,
+                true,
+                false
+        );
+
+        XYPlot plot = chart.getXYPlot();
+        plot.setAxisOffset(new RectangleInsets(5.0, 5.0, 5.0, 5.0));
+        plot.setDomainPannable(true);
+        plot.setRangePannable(true);
+
+        XYLineAndShapeRenderer renderer = new XYLineAndShapeRenderer(true, false);
+        plot.setRenderer(renderer);
+
+        return chart;
+    }
+
+    public void updateWins(int newWins) {
+        wins = newWins;
+        winsHistory.add(wins);
+
+        if (winsHistory.size() > 1000) {
+            winsHistory.remove(0);
+        }
+
+        if (chartPanel != null) {
+            JFreeChart chart = createChart(createDataset());
+            chartPanel.setChart(chart);
+        }
+    }
+
+
+
 
     @Override
     public void reset() {
         if (turnNumber == 15) {
+            System.out.println(gameNumber);
+            System.out.println(epsilon);
+            System.out.println(smoothingFactor);
             turnNumber = 0;
-
+            gamePointsHistory.add(myPoints);
             if (myPoints > hisPoints) {
                 wins++;
+                consecutiveWins++;
+                consecutiveLoss = 0;
+            } else {
+                consecutiveLoss++;
+                consecutiveWins = 0;
             }
+
+            updateWins(wins);
+
             pastGames.add(new Counter(hisCardsPlayed, specialCardsPlayed));
-            System.out.println("Wins: " + wins + " out of " + (gameNumber + 1));
             evaluation();
             patternAnalysis();
-            if(nextStrategy != null) {
+            if (nextStrategy != null) {
                 currentStrategy = nextStrategy;
+                usedStrategies.add(nextStrategy);
                 ((MyBot) currentStrategy).reset();
             }
             gameNumber++;
+            adjustEpsilon();
         }
         super.reset();
     }
+
 
     @Override
     public int gibKarte(int nextCard) {
@@ -67,7 +192,6 @@ public class SewingsRitter extends MyBot {
                 newStrategyPoints[j] += simulation.playGame();
             }
         }
-        applyDecayToPerformanceData();
         // Update the performance data for the new strategy
         strategyPerformanceData.add(newStrategyPoints);
 
@@ -89,19 +213,6 @@ public class SewingsRitter extends MyBot {
         }
     }
 
-    private void applyDecayToPerformanceData() {
-        for (int i = 0; i < strategyPerformanceData.size(); i++) {
-            int[] data = strategyPerformanceData.get(i);
-            for (int j = 0; j < data.length; j++) {
-                if(data[j] == -1)
-                    continue;
-                data[j] = (int) (data[j] * Math.pow(0.99,(j + 1)));
-            }
-            strategyPerformanceData.set(i, data);
-        }
-    }
-
-
     private Map<Strategy, Double> analyzeStrategyPerformance() {
         Map<Strategy, Double> strategyPerformance = new HashMap<>();
         for (int i = 0; i < strategies.size(); i++) {
@@ -113,20 +224,19 @@ public class SewingsRitter extends MyBot {
 
     private double calculateExponentialMovingAverage(int[] points) {
         double ema = 0.0;
-        double smoothingFactor = 0.2; // You can adjust this factor as needed
+        boolean isFirstValidPoint = true;
 
-        int validDataCount = 0; // Keep track of the number of valid data points
+        for (int point : points) {
+            double adjustedPoint = point;
+            if (point == -1) {
+                adjustedPoint *= 0.995;
+            }
 
-        if (points.length > 0) {
-            for (int i = 0; i < points.length; i++) {
-                if (points[i] != -1) {
-                    if (validDataCount == 0) {
-                        ema = points[i]; // Initialize EMA with the first valid data point
-                    } else {
-                        ema = smoothingFactor * points[i] + (1 - smoothingFactor) * ema;
-                    }
-                    validDataCount++;
-                }
+            if (isFirstValidPoint) {
+                ema = adjustedPoint; // Initialize EMA with the first (adjusted) data point
+                isFirstValidPoint = false;
+            } else {
+                ema = smoothingFactor * adjustedPoint + (1 - smoothingFactor) * ema;
             }
         }
 
@@ -134,9 +244,8 @@ public class SewingsRitter extends MyBot {
     }
 
 
-    private void updateFutureStrategies(Map<Strategy, Double> performanceResults) {
-        double epsilon = 0.1; // Probability of choosing a random strategy
 
+    private void updateFutureStrategies(Map<Strategy, Double> performanceResults) {
         if (Math.random() < epsilon) {
             // Exploration: Choose a random strategy
             int randomIndex = Utils.random.nextInt(strategies.size());

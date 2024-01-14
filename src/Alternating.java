@@ -18,14 +18,14 @@ public class Alternating extends MyBot implements Strategy {
     @Override
     public int giveCard(int nextCard) {
         int myCard = 0;
-        switch(currentStrategy % 2) {
+        switch(currentStrategy % 3) {
             case 0:
                 if((nextCard + 5) != 0 && myCards.contains((Integer) nextCard + 5))
                     myCard = nextCard + 5;
                 else
                     myCard = myCards.get(Utils.random.nextInt(myCards.size()));
                 break;
-            case 1:
+            case 1: case 2:
                myCard = myCards.get(Utils.random.nextInt(myCards.size()));
         }
         return super.giveCard(nextCard, myCard);
