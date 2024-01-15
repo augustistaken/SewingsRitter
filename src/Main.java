@@ -1,8 +1,8 @@
 public class Main {
     public static void main(String[] args) throws Exception {
         HolsDerGeier holsDerGeier = new HolsDerGeier();
-        holsDerGeier.neueSpieler(new SewingsRitter(), new Random());
-        for(int i=0;i<1000;i++) {
+        holsDerGeier.neueSpieler(new FiveGroups(), new SewingsRitter());
+        for(int i=0;i<100;i++) {
             holsDerGeier.ganzesSpiel();
             holsDerGeier.naechstesSpiel();
         }

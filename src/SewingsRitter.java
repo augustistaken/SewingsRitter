@@ -73,7 +73,7 @@ public class SewingsRitter extends MyBot {
         } else {
             if(consecutiveWins == WIN_THRESHOLD) {
                 epsilon = Math.max(epsilon - DELTA_EPSILON, MIN_EPSILON);
-                consecutiveWins = 0;
+                consecutiveLoss = 0;
                 consecutiveWins = 0;
             }
         }
